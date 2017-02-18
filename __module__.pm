@@ -1,10 +1,48 @@
 package Rex::Gentoo::Install;
 
 use Rex -base;
+use Term::ANSIColor;
 
-task example => sub {
-   my $output = run "uptime";
-   say $output;
+desc 'Install base Gentoo host system';
+
+
+
+task 'bootstrap_env', sub {
+
+    account "install",
+    ensure         => "present",
+    password       => 'welcome1';
+
+};
+
+sub setup_disk_layout {
+
+    print colored(['bold green'], 'Do you want to perform disk repartitioning? [No]\n');
+    my $choice;
+    while (<>) {
+        print colored(['bold yellow'], '[Yy]es/[Nn]o\n');
+        switch ($_) {
+            case /[Yy]es/ {
+                Rex::Disk::Layout::setup();
+            }
+            case /[Nn]o/ {
+                print ('Skipping...');
+            }
+            else {
+                print "Sorry, response '$_' not understood. \n"
+                    print colored(['bold yellow'], '[Yy]es/[Nn]o\n');
+            }
+        }
+    }
+}
+
+task 'setup', sub {
+
+    setup_disk_layout();
+
+
+
+
 };
 
 1;

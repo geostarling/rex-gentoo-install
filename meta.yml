@@ -2,3 +2,7 @@ Name: Rex::Gentoo::Install
 Description: Basic Gentoo installation module
 Author: Jiří Špaček spaceji3@fit.cvut.cz
 License: MIT
+Require:
+  Rex::Disk::Layout:
+    git: ../disk-layout-module
+    branch: master
