@@ -6,3 +6,5 @@ Require:
   Rex::Disk::Layout:
     git: ../recepejsy/disk-layout-module
     branch: master
+PerlRequire:
+  - Term::ANSIColor

@@ -5,7 +5,9 @@ use Term::ANSIColor;
 
 desc 'Install base Gentoo host system';
 
-
+include qw/
+Rex::Disk::Layout
+/;
 
 task 'bootstrap_env', sub {
 
@@ -15,35 +17,34 @@ task 'bootstrap_env', sub {
 
 };
 
-sub setup_disk_layout {
+sub optional {
+  my ( $command, $question ) = @_;
 
-    print colored(['bold green'], 'Do you want to perform disk repartitioning? [No]\n');
-    my $choice;
-    while (<>) {
-        print colored(['bold yellow'], '[Yy]es/[Nn]o\n');
-        switch ($_) {
-            case /[Yy]es/ {
-                Rex::Disk::Layout::setup();
-            }
-            case /[Nn]o/ {
-                print ('Skipping...');
-            }
-            else {
-                print "Sorry, response '$_' not understood. \n"
-                    print colored(['bold yellow'], '[Yy]es/[Nn]o\n');
-            }
-        }
+  print colored(['bold blue'], "$question [No]\n");
+  print colored(['bold yellow'], "[Yy]es/[Nn]o: ");
+  while  ( <STDIN> ) {
+    if ( /[Yy]es/ ) {
+      $command->();
+      last;
+    } elsif ( /[Nn]o/ ) {
+      say "Skipping...";
+      last;
+    } else {
+      print "Sorry, response '" . $_ =~ s/\s+$//r . "' was not understood. \n";
+      print colored(['bold yellow'], '[Yy]es/[Nn]o: ');
     }
+  }
 }
 
 task 'setup', sub {
+  optional \&Rex::Disk::Layout::setup_partitions, "Do you want to setup partitions?" ;
+  optional \&Rex::Disk::Layout::setup_filesystems, "Do you want to setup filesystems?" ;
 
-    setup_disk_layout();
-
-
-
+  Rex::Disk::Layout::mount_filesystems { mount_root => '/mnt/gentoo' };
 
 };
+
+
 
 1;
 
