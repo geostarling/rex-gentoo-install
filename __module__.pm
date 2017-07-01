@@ -41,6 +41,7 @@ task 'setup', sub {
   optional \&Rex::Disk::Layout::setup_filesystems, "Do you want to setup filesystems?" ;
 
   Rex::Disk::Layout::mount_filesystems { mount_root => '/mnt/gentoo' };
+  Rex::Disk::Layout::swapon();
 
 };
 
