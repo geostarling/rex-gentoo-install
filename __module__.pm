@@ -2,33 +2,17 @@ package Rex::Gentoo::Install;
 
 use Rex -base;
 use Rex::Template::TT;
-
-use Term::ANSIColor;
+use Rex::Gentoo::Utils;
 
 desc 'Install base Gentoo host system';
 
 include qw/
 Rex::Disk::Layout
+Rex::Gentoo::Host
+Rex::Gentoo::Kernel
+Rex::Gentoo::Networking
+Rex::Bootloader::Syslinux
 /;
-
-sub optional {
-  my ( $command, $question ) = @_;
-
-  print colored(['bold blue'], "$question [No]\n");
-  print colored(['bold yellow'], "[Yy]es/[Nn]o: ");
-  while  ( <STDIN> ) {
-    if ( /[Yy]es/ ) {
-      $command->();
-      last;
-    } elsif ( /[Nn]o/ ) {
-      say "Skipping...";
-      last;
-    } else {
-      print "Sorry, response '" . $_ =~ s/\s+$//r . "' was not understood. \n";
-      print colored(['bold yellow'], '[Yy]es/[Nn]o: ');
-    }
-  }
-}
 
 task 'install', sub {
   optional \&Rex::Disk::Layout::setup_partitions, "Do you want to setup partitions?" ;
@@ -66,120 +50,52 @@ task 'install_base_system', sub {
   run "mount --make-rslave /mnt/gentoo/dev";
 
   chroot "/mnt/gentoo", sub {
-    $DB::single = 1;
-    # setup make.conf
-    setup_portage();
+    Rex::Gentoo::Host::setup_portage();
 
-    _eselect("profile", "portage_profile", "default/linux/amd64/13.0");
+    #    _eselect("profile", "portage_profile", "default/linux/amd64/13.0");
 
     # sync portage tree
-    update_package_db;
+#    update_package_db;
 
     # update all installed packages (@world) to their latest versions
-    update_system;
+#    optional sub { update_system }, 'Do you want to update @world packages?';
 
-    setup_timezone();
+    #    Rex::Gentoo::Host::setup_timezone();
 
-    setup_locales();
+    #    Rex::Gentoo::Host::setup_locales();
 
-    setup_kernel();
+    Rex::Gentoo::Host::setup_kernel();
 
-    Rex::Disk::Layout::install_fstab "automount" => false;
+    # Rex::Disk::Layout::setup_fstab("automount" => FALSE);
 
     Rex::Gentoo::Networking::setup();
 
-    install_core_services();
+    # install_core_services();
 
-    Rex::Bootloader::Syslinux::install();
+    optional \&Rex::Bootloader::Syslinux::install_bootloader, "Do you want to install bootloader?";
+    Rex::Bootloader::Syslinux::setup();
 
-    setup_ssh_keys user => 'root';
+    Rex::Gentoo::Host::setup_ssh_keys(user => 'root');
+
+    $DB::single = 1;
 
   };
   run "umount -l /mnt/gentoo/dev{/shm,/pts,}";
   run "umount -R /mnt/gentoo";
-  optional { run "reboot"; }, "Installation completed successfuly. Reboot now?";
+  optional sub { run "reboot"; }, "Installation completed successfuly. Reboot now?";
 
-};
-
-task 'setup_ssh_keys', sub {
-  my $params = shift;
-  my $users = param_lookup 'users', [];
-  if ( exists $params->{user} ) {
-    $users = \grep { $_->{name} == $params->{user} } @$users;
-  }
-  foreach $user (@$users) {
-    my $keys = $user->{ssh_keys};
-    foreach $key (@{$user->{ssh_keys}}) {
-      my $comment = $key->{comment};
-      append_or_amend_line "~/.ssh/authorized_keys",
-        line  => $key->{key} . " " . $comment,
-        regexp => qr{^ssh-rsa [^ ]+ $comment$};
-    }
-  }
 };
 
 task 'install_core_services', sub {
   my $pkgs = param_lookup 'core_packages', [];
   my $svcs = param_lookup 'core_services', [];
-  foreach $pkg (@$pkgs) {
+  foreach my $pkg (keys %$pkgs) {
     pkg $pkg, ensure  => "present";
   }
-  foreach $svc (@$svcs) {
+  foreach my $svc (keys %$svcs) {
     service $svc, ensure => "started";
   }
 };
-
-task 'setup_portage', sub {
-  file "/etc/portage/make.conf",
-    content => template("templates/make.conf.tt");
-};
-
-task 'setup_timezone', sub {
-  file '/etc/timezone',
-    content => param_lookup('timezone', 'Etc/UTC'),
-    on_change => sub { run 'emerge --config sys-libs/timezone-data'; };
-};
-
-task 'setup_locales', sub {
-  file '/etc/locale.gen',
-    content => join("\n", @{param_lookup('locales', ['en_US.UTF-8 UTF-8'])}),
-    on_change => sub { run 'locale-gen'; };
-
-  _eselect("locale", "system_locale", "en_US.utf8");
-};
-
-task 'setup_kernel', sub {
-  $DB::single = 1;
-  optional \&Rex::Gentoo::Kernel::setup_kernel, "Do you want to (re)compile the kernel?" ;
-};
-
-
-task 'setup_users', sub {
-  my $users = param_lookup 'users', [];
-  foreach $user (@$users) {
-    if ($user->{name} != 'root') {
-      account $user->{name},
-        ensure         => "present",
-        comment        => 'User Account',
-        groups         => $user->{groups},
-        password       => $user->{password},
-        crypt_password => $user->{crypt_password};
-    }
-    setup_ssh_keys user => $user->{name};
-  }
-};
-
-sub _eselect {
-  my ( $module, $param_name, $default_target ) = @_;
-  my $desired_target = param_lookup $param_name, $default_target;
-  my @available_targets = run "eselect --brief $module list";
-  my $targets_count = scalar @available_targets;
-  my ( $target_index ) = grep { @available_targets[$_] eq $desired_target } 0..$targets_count;
-
-  # NOTE: targets are numbered from 1
-  run "eselect $module set " . ($target_index + 1);
-}
-
 
 1;
 
