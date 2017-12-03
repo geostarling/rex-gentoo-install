@@ -15,8 +15,8 @@ Rex::Bootloader::Syslinux
 /;
 
 task 'install', sub {
-  optional \&Rex::Disk::Layout::setup_partitions, "Do you want to setup partitions?" ;
-  optional \&Rex::Disk::Layout::setup_filesystems, "Do you want to setup filesystems?" ;
+  Rex::Gentoo::Utils::optional(\&Rex::Disk::Layout::setup_partitions, "Do you want to setup partitions?" );
+  Rex::Gentoo::Utils::optional(\&Rex::Disk::Layout::setup_filesystems, "Do you want to setup filesystems?" );
 
   Rex::Disk::Layout::mount_filesystems { mount_root => '/mnt/gentoo' };
   Rex::Disk::Layout::swapon();
@@ -72,7 +72,7 @@ task 'install_base_system', sub {
 
     # install_core_services();
 
-    optional \&Rex::Bootloader::Syslinux::install_bootloader, "Do you want to install bootloader?";
+    Rex::Gentoo::Utils::optional(\&Rex::Bootloader::Syslinux::install_bootloader, "Do you want to install bootloader?");
     Rex::Bootloader::Syslinux::setup();
 
     Rex::Gentoo::Host::setup_ssh_keys(user => 'root');
@@ -82,7 +82,7 @@ task 'install_base_system', sub {
   };
   run "umount -l /mnt/gentoo/dev{/shm,/pts,}";
   run "umount -R /mnt/gentoo";
-  optional sub { run "reboot"; }, "Installation completed successfuly. Reboot now?";
+  Rex::Gentoo::Utils::optional(sub { run "reboot"; }, "Installation completed successfuly. Reboot now?");
 
 };
 
@@ -93,6 +93,7 @@ task 'install_core_services', sub {
     pkg $pkg, ensure  => "present";
   }
   foreach my $svc (keys %$svcs) {
+    service $svc, ensure => "enabled";
     service $svc, ensure => "started";
   }
 };
