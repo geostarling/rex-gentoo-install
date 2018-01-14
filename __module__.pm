@@ -14,25 +14,29 @@ Rex::Gentoo::Networking
 Rex::Bootloader::Syslinux
 /;
 
-task 'install', sub {
-  Rex::Gentoo::Utils::optional(\&Rex::Disk::Layout::setup_partitions, "Do you want to setup partitions?" );
-  Rex::Gentoo::Utils::optional(\&Rex::Disk::Layout::setup_filesystems, "Do you want to setup filesystems?" );
+task 'install_from_livecd', sub {
+  $DB::single = 1;
+  Rex::Gentoo::Utils::optional(\&Rex::Disk::Layout::setup_partitions, "Do you want to setup partitions?");
+  Rex::Gentoo::Utils::optional(\&Rex::Disk::Layout::setup_filesystems, "Do you want to setup filesystems?");
 
   Rex::Disk::Layout::mount_filesystems { mount_root => '/mnt/gentoo' };
   Rex::Disk::Layout::swapon();
 
   install_stage_tarball();
+  install_base_system();
 };
 
 task 'install_stage_tarball', sub {
   my $stage_tarball_url = param_lookup "stage_tarball_url", ();
   my $stage_tarball = param_lookup "stage_tarball", ();
+
   run "Download stage tarball",
     command => "wget -O /mnt/gentoo/$stage_tarball $stage_tarball_url",
-    creates => "/mnt/gentoo/$stage_tarball";
-  # TODO verify hash and signature
+  creates => "/mnt/gentoo/$stage_tarball";
+
+  # TODO verify PGP signature
   extract "/mnt/gentoo/$stage_tarball", to => "/mnt/gentoo";
-    file "/mnt/gentoo/$stage_tarball", ensure => "absent";
+  file "/mnt/gentoo/$stage_tarball", ensure => "absent";
 };
 
 task 'install_base_system', sub {
@@ -52,32 +56,32 @@ task 'install_base_system', sub {
   chroot "/mnt/gentoo", sub {
     Rex::Gentoo::Host::setup_portage();
 
-    #    _eselect("profile", "portage_profile", "default/linux/amd64/13.0");
+    # sync portage tree and profile list
+    update_package_db;
 
-    # sync portage tree
-#    update_package_db;
+    # setup the gentoo profile
+    Rex::Gentoo::Host::setup_profile();
 
     # update all installed packages (@world) to their latest versions
-#    optional sub { update_system }, 'Do you want to update @world packages?';
+    Rex::Gentoo::Utils::optional sub { update_system }, 'Do you want to update @world packages?';
 
-    #    Rex::Gentoo::Host::setup_timezone();
-
-    #    Rex::Gentoo::Host::setup_locales();
-
+    Rex::Gentoo::Host::setup_timezone();
+    Rex::Gentoo::Host::setup_locales();
     Rex::Gentoo::Host::setup_kernel();
 
-    # Rex::Disk::Layout::setup_fstab("automount" => FALSE);
+    Rex::Disk::Layout::setup_fstab("automount" => FALSE);
+
+    Rex::Gentoo::Host::setup_hostname();
+    Rex::Gentoo::Host::setup_hosts();
 
     Rex::Gentoo::Networking::setup();
 
-    # install_core_services();
+    install_core_services();
 
     Rex::Gentoo::Utils::optional(\&Rex::Bootloader::Syslinux::install_bootloader, "Do you want to install bootloader?");
     Rex::Bootloader::Syslinux::setup();
 
     Rex::Gentoo::Host::setup_ssh_keys(user => 'root');
-
-    $DB::single = 1;
 
   };
   run "umount -l /mnt/gentoo/dev{/shm,/pts,}";
@@ -93,7 +97,6 @@ task 'install_core_services', sub {
     pkg $pkg, ensure  => "present";
   }
   foreach my $svc (keys %$svcs) {
-    service $svc, ensure => "enabled";
     service $svc, ensure => "started";
   }
 };
